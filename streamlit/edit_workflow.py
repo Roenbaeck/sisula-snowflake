@@ -354,60 +354,178 @@ with col_right:
 
     is_new = st.session_state.selected == "__new__"
     title = "New workflow" if is_new else st.session_state.selected
-    st.subheader(title)
 
     parsed, error = validate_json(st.session_state.content)
+    if error:
+        st.error(f"Invalid JSON: {error}")
+        st.stop()
 
-    # Graph visualization (top) + JSON editor (bottom) as tabs
-    tab_graph, tab_json = st.tabs(["Graph", "JSON"])
+    tasks = parsed.setdefault("TASKS", [])
+    task_names = [t.get("name", f"task_{i}") for i, t in enumerate(tasks)]
 
-    with tab_graph:
-        if parsed and parsed.get("TASKS"):
+    # Sync session state back to parsed before rendering widgets
+    def ss(key, fallback):
+        return st.session_state.get(key, fallback)
+
+    parsed["WORKFLOW"] = ss("wf_name", parsed.get("WORKFLOW", ""))
+    parsed["WAREHOUSE"] = ss("wh", parsed.get("WAREHOUSE", ""))
+    parsed["TASK_TIMEOUT"] = ss("timeout", parsed.get("TASK_TIMEOUT", 3600000))
+    parsed["MAX_FAILURES"] = ss("max_fail", parsed.get("MAX_FAILURES", 3))
+    parsed["CONFIG"] = ss("cfg", parsed.get("CONFIG", ""))
+
+    # Top section: graph + properties side by side
+    col_graph, col_props = st.columns([2, 1])
+
+    with col_graph:
+        st.caption("Graph")
+        if tasks:
             graph_data = extract_graph(parsed)
-            components.html(render_graph_html(graph_data), height=400)
-        elif error:
-            st.error(f"Invalid JSON: {error}")
+            components.html(render_graph_html(graph_data), height=350)
         else:
             st.info("No tasks defined yet.")
 
+    with col_props:
+        st.caption("Workflow")
+        st.text_input("Name", value=parsed.get("WORKFLOW", ""), key="wf_name", label_visibility="collapsed")
+        st.text_input("Warehouse", value=parsed.get("WAREHOUSE", ""), key="wh")
+        st.number_input("Timeout (ms)", value=parsed.get("TASK_TIMEOUT", 3600000), step=60000, key="timeout")
+        st.number_input("Max failures", value=parsed.get("MAX_FAILURES", 3), min_value=0, step=1, key="max_fail")
+        st.text_input("Config (JSON)", value=parsed.get("CONFIG", ""), key="cfg")
+
+        st.caption("Tasks")
+        if not task_names:
+            st.info("No tasks.")
+        else:
+            sel_idx = st.selectbox("Edit task", range(len(task_names)),
+                                   format_func=lambda i: task_names[i], key="task_sel")
+            sel_task = tasks[sel_idx]
+            sel_pfx = f"t{sel_idx}_"
+
+            # Add task button
+            if st.button("+ Add task", use_container_width=True):
+                tasks.append({"name": "new_task", "description": "", "steps": [], "after": []})
+                st.experimental_rerun()
+
+    # Bottom: task form and JSON tabs
+    tab_task, tab_steps, tab_json = st.tabs(["Task", "Steps", "JSON"])
+
+    with tab_task:
+        if not task_names:
+            st.info("Create a task to get started.")
+        else:
+            # Sync session state back to sel_task
+            sel_task["name"] = ss(sel_pfx + "name", sel_task.get("name", ""))
+            sel_task["description"] = ss(sel_pfx + "desc", sel_task.get("description", ""))
+            sel_task["is_root"] = ss(sel_pfx + "root", sel_task.get("is_root", False))
+            sel_task["state"] = ss(sel_pfx + "state", sel_task.get("state", "suspended"))
+            sel_task["schedule"] = ss(sel_pfx + "sched", sel_task.get("schedule", ""))
+
+            col_t1, col_t2 = st.columns(2)
+            with col_t1:
+                st.text_input("Name", value=sel_task.get("name", ""), key=sel_pfx + "name")
+                st.text_area("Description", value=sel_task.get("description", ""), key=sel_pfx + "desc", height=60)
+            with col_t2:
+                st.checkbox("Is root", value=sel_task.get("is_root", False), key=sel_pfx + "root")
+                st.selectbox("State", ["suspended", "running"],
+                             index=0 if sel_task.get("state", "suspended") == "suspended" else 1,
+                             key=sel_pfx + "state")
+            st.text_input("Schedule (cron)", value=sel_task.get("schedule", "") or "",
+                          key=sel_pfx + "sched",
+                          help="Set on the root task. Example: USING CRON 0 2 * * * UTC")
+
+            # After dependencies
+            parent_names = [n for i, n in enumerate(task_names) if i != sel_idx]
+            after = sel_task.get("after") or []
+            after_names = [a.get("name", "") for a in after]
+            task_after = st.multiselect("Run after", options=parent_names,
+                                        default=after_names, key=sel_pfx + "after")
+            sel_task["after"] = [{"name": n} for n in task_after] if task_after else None
+
+            # Remove task
+            if st.button("Remove this task", type="secondary"):
+                tasks.pop(sel_idx)
+                for k in list(st.session_state.keys()):
+                    if k.startswith(sel_pfx):
+                        del st.session_state[k]
+                st.experimental_rerun()
+
+    with tab_steps:
+        if not task_names:
+            st.info("Create a task first.")
+        else:
+            for si, step in enumerate(sel_task.setdefault("steps", [])):
+                step_pfx = sel_pfx + f"s{si}_"
+                with st.expander(f"Step {si+1}: {step.get('description', 'Not described')}", expanded=si == len(sel_task["steps"]) - 1):
+                    step["type"] = ss(step_pfx + "type", step.get("type", "proc"))
+                    step["description"] = ss(step_pfx + "desc", step.get("description", ""))
+
+                    st.selectbox("Type", ["proc", "sql", "lineage", "rows", "return_value"],
+                                 index=["proc", "sql", "lineage", "rows", "return_value"].index(step.get("type", "proc")),
+                                 key=step_pfx + "type")
+                    st.text_input("Description", value=step.get("description", ""), key=step_pfx + "desc")
+
+                    if step["type"] == "proc":
+                        step["call"] = ss(step_pfx + "call", step.get("call", ""))
+                        st.text_input("CALL", value=step.get("call", ""), key=step_pfx + "call")
+                    elif step["type"] == "sql":
+                        step["sql"] = ss(step_pfx + "sql", step.get("sql", ""))
+                        src = ss(step_pfx + "src", (step.get("lineage") or {}).get("source", ""))
+                        tgt = ss(step_pfx + "tgt", (step.get("lineage") or {}).get("target", ""))
+                        st.text_input("Source", value=src, key=step_pfx + "src")
+                        st.text_input("Target", value=tgt, key=step_pfx + "tgt")
+                        step["sql"] = st.text_area("SQL", value=step.get("sql", ""), height=80, key=step_pfx + "sql")
+                        if src or tgt:
+                            step["lineage"] = {"source": src, "target": tgt}
+                        else:
+                            step["lineage"] = None
+                    elif step["type"] == "lineage":
+                        step["source"] = ss(step_pfx + "src", step.get("source", ""))
+                        step["target"] = ss(step_pfx + "tgt", step.get("target", ""))
+                        st.text_input("Source", value=step.get("source", ""), key=step_pfx + "src")
+                        st.text_input("Target", value=step.get("target", ""), key=step_pfx + "tgt")
+                    elif step["type"] == "rows":
+                        for fld in ["inserted", "updated", "deleted", "merged"]:
+                            step[fld] = ss(step_pfx + fld, step.get(fld, 0))
+                        col_r1, col_r2 = st.columns(2)
+                        col_r1.number_input("Inserted", value=step.get("inserted", 0), key=step_pfx + "inserted")
+                        col_r2.number_input("Updated", value=step.get("updated", 0), key=step_pfx + "updated")
+                        col_r1.number_input("Deleted", value=step.get("deleted", 0), key=step_pfx + "deleted")
+                        col_r2.number_input("Merged", value=step.get("merged", 0), key=step_pfx + "merged")
+                    elif step["type"] == "return_value":
+                        step["message"] = ss(step_pfx + "msg", step.get("message", ""))
+                        st.text_input("Message", value=step.get("message", ""), key=step_pfx + "msg")
+
+            # Add / remove steps
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                if st.button("+ Add step", use_container_width=True):
+                    sel_task.setdefault("steps", []).append({"type": "proc", "description": ""})
+                    st.experimental_rerun()
+            with col_s2:
+                if sel_task.get("steps") and st.button("Remove last step", use_container_width=True):
+                    sel_task["steps"].pop()
+                    st.experimental_rerun()
+
     with tab_json:
-        edited = st.text_area(
-            "JSON definition",
-            value=st.session_state.content,
-            height=500,
-            key="json_editor",
-        )
+        st.caption("Live preview — the JSON updates as you edit the form above.")
+        st.code(json.dumps(parsed, indent=2), language="json")
 
-        if edited != st.session_state.content:
-            st.session_state.content = edited
-            st.session_state.modified = True
-
-        # Re-validate after edit
-        parsed, error = validate_json(st.session_state.content)
-        if error:
-            st.error(f"Invalid JSON: {error}")
-        elif parsed:
-            st.success("Valid JSON")
-            tasks = parsed.get("TASKS", [])
-            root = next((t for t in tasks if t.get("is_root") or t.get("schedule")), None)
-            col_m1, col_m2, col_m3 = st.columns(3)
-            with col_m1:
-                st.metric("Tasks", len(tasks))
-            with col_m2:
-                st.metric("Root task", root.get("name", "?") if root else "—")
-            with col_m3:
-                st.metric("Schedule", root.get("schedule", "—") if root else "—")
+    # Save serialized state
+    st.session_state.content = json.dumps(parsed)
 
     # Action buttons
     st.write("")
-    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("Save", type="primary", disabled=not parsed, use_container_width=True):
+        if st.button("Save", type="primary", use_container_width=True):
             name = parsed.get("WORKFLOW", st.session_state.selected)
             result = save_workflow(name, st.session_state.content)
             st.cache_data.clear()
             st.session_state.selected = name
-            st.session_state.modified = False
+            # Clear prefixed session keys to avoid stale data on next workflow
+            for k in list(st.session_state.keys()):
+                if k.startswith("t") and "_" in k:
+                    del st.session_state[k]
             st.success(f"Saved (CF_ID={result})")
     with col_btn2:
         if st.button("Delete", type="secondary", use_container_width=True):
@@ -417,6 +535,3 @@ with col_right:
             del st.session_state.content
             st.success(result)
             st.experimental_rerun()
-    with col_btn3:
-        if st.session_state.get("modified"):
-            st.caption("Unsaved changes")
