@@ -7,3 +7,6 @@ entities:
     main_file: edit_workflow.py
     query_warehouse: COMPUTE_WH
     stage: streamlit
+    artifacts:
+      - edit_workflow.py
+      - LayoutEngine.js
