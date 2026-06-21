@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Workflow Editor</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font: 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #222; background: #fff; }
+#app { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+#sidebar { background: #1e1e2e; color: #cdd6f4; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
+#sidebar h3 { font-size: 0.9rem; color: #a6adc8; margin-bottom: 0.25rem; }
+#sidebar button { width: 100%; padding: 0.4rem; border: none; border-radius: 6px; cursor: pointer; font: inherit; }
+#sidebar .btn-new { background: #2ea043; color: #fff; }
+#sidebar .btn-new:hover { background: #2c974b; }
+.workflow-item { padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: background 0.15s; }
+.workflow-item:hover { background: #363645; }
+.workflow-item.active { background: #4a4a6a; font-weight: 600; }
+#main { display: flex; flex-direction: column; overflow-y: auto; padding: 0; }
+.empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: #888; font-size: 1.1rem; }
+/* Top row: graph + properties */
+.top-row { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; padding: 1rem; min-height: 350px; }
+#graph-container { background: #1a1a2e; border-radius: 8px; overflow: hidden; position: relative; min-height: 300px; }
+#graph-container svg { width: 100%; height: 100%; display: block; }
+#graph-container .node-circle { cursor: pointer; transition: filter 0.15s; }
+#graph-container .node-circle:hover { filter: brightness(1.3); }
+#graph-container .node-selected { stroke: #ff6b6b !important; stroke-width: 4 !important; }
+#graph-container .node-label { fill: #e0e0e0; font-size: 10px; font-family: sans-serif; }
+#graph-container .edge-line { stroke: #4a9eff; stroke-width: 1.5; fill: none; opacity: 0.5; }
+#graph-container .root-node { stroke: #ffd700; stroke-width: 2.5; }
+/* Properties panel */
+#props { display: flex; flex-direction: column; gap: 0.5rem; }
+#props label { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.3rem; display: block; }
+#props input, #props select { width: 100%; padding: 0.35rem 0.5rem; border: 1px solid #d0d7de; border-radius: 6px; font: inherit; }
+#props input:focus, #props select:focus { outline: none; border-color: #4a9eff; box-shadow: 0 0 0 2px rgba(74,158,255,0.2); }
+/* Metrics */
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; padding: 0 1rem; }
+.metric { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 0.5rem 0.8rem; text-align: center; }
+.metric .value { font-size: 1.2rem; font-weight: 700; }
+.metric .label { font-size: 0.7rem; color: #666; }
+/* Task buttons */
+.task-buttons { display: flex; gap: 0.3rem; padding: 0.5rem 1rem; flex-wrap: wrap; }
+.task-btn { padding: 0.3rem 0.7rem; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; cursor: pointer; font: inherit; font-size: 0.8rem; transition: all 0.15s; }
+.task-btn:hover { background: #f0f4f8; }
+.task-btn.active { background: #4a9eff; color: #fff; border-color: #4a9eff; font-weight: 600; }
+/* Tabs */
+.tabs { display: flex; border-bottom: 1px solid #d0d7de; padding: 0 1rem; gap: 0; }
+.tab { padding: 0.5rem 1rem; cursor: pointer; font-size: 0.85rem; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+.tab:hover { color: #4a9eff; }
+.tab.active { border-color: #4a9eff; color: #4a9eff; font-weight: 600; }
+.tab-content { padding: 1rem; display: none; }
+.tab-content.active { display: block; }
+/* Form grid */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.form-grid.full { grid-template-columns: 1fr; }
+.form-group { display: flex; flex-direction: column; gap: 0.2rem; }
+.form-group textarea { resize: vertical; min-height: 60px; padding: 0.35rem 0.5rem; border: 1px solid #d0d7de; border-radius: 6px; font: inherit; }
+.form-group textarea:focus { outline: none; border-color: #4a9eff; }
+/* Steps */
+.step { border: 1px solid #d0d7de; border-radius: 8px; margin-bottom: 0.5rem; overflow: hidden; }
+.step-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; cursor: pointer; background: #f6f8fa; }
+.step-header:hover { background: #eef0f2; }
+.step-header .badge { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+.step-body { padding: 0.75rem; display: none; }
+.step.open .step-body { display: block; }
+.badge-proc { background: #ddf4ff; color: #0969da; }
+.badge-sql { background: #dafbe1; color: #1a7f37; }
+.badge-lineage { background: #fff8c5; color: #9a6700; }
+.badge-rows { background: #fbefff; color: #8250df; }
+.badge-return_value { background: #ffebe9; color: #cf222e; }
+/* Buttons at bottom */
+.actions { display: flex; gap: 0.5rem; padding: 0.75rem 1rem; border-top: 1px solid #d0d7de; }
+.actions button { padding: 0.5rem 1.2rem; border: none; border-radius: 6px; cursor: pointer; font: inherit; font-weight: 500; transition: opacity 0.15s; }
+.actions button:hover { opacity: 0.9; }
+.actions .btn-save { background: #2ea043; color: #fff; }
+.actions .btn-delete { background: #cf222e; color: #fff; margin-left: auto; }
+.actions .btn-add-task { background: #f6f8fa; color: #222; border: 1px solid #d0d7de; }
+/* JSON tab */
+#tab-json pre { background: #f6f8fa; border-radius: 8px; padding: 1rem; font-size: 0.8rem; overflow-x: auto; max-height: 400px; overflow-y: auto; }
+/* Status */
+#status { position: fixed; bottom: 1rem; right: 1rem; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.8rem; opacity: 0; transition: opacity 0.3s; z-index: 100; }
+#status.show { opacity: 1; }
+#status.success { background: #dafbe1; color: #1a7f37; }
+#status.error { background: #ffebe9; color: #cf222e; }
+/* Config textarea */
+.config-area { width: 100%; padding: 0.35rem; border: 1px solid #d0d7de; border-radius: 6px; font: 0.75rem monospace; resize: vertical; min-height: 50px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <h3>Workflows</h3>
+    <button class="btn-new" onclick="newWorkflow()">+ New workflow</button>
+    <div id="workflow-list" style="margin-top:0.5rem;"></div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <div id="empty-state" class="empty-state">Select a workflow from the sidebar or create a new one.</div>
+
+    <div id="editor" style="display:none;">
+      <!-- Top row: graph + properties -->
+      <div class="top-row">
+        <div id="graph-container"></div>
+        <div id="props">
+          <label>Workflow Properties</label>
+          <input id="wf-name" placeholder="Workflow name" oninput="syncForm()"/>
+          <input id="wf-wh" placeholder="Warehouse" oninput="syncForm()"/>
+          <input id="wf-timeout" type="number" placeholder="Timeout (ms)" oninput="syncForm()"/>
+          <input id="wf-max-fail" type="number" placeholder="Max failures" oninput="syncForm()"/>
+          <textarea id="wf-config" class="config-area" placeholder="Config JSON (optional)" oninput="syncForm()" rows="2"></textarea>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics" id="metrics"></div>
+
+      <!-- Task select buttons -->
+      <div class="task-buttons" id="task-buttons"></div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('task')">Task Properties</div>
+        <div class="tab" onclick="switchTab('steps')">Steps</div>
+        <div class="tab" onclick="switchTab('json')">JSON</div>
+      </div>
+      <div class="tab-content active" id="tab-task"></div>
+      <div class="tab-content" id="tab-steps"></div>
+      <div class="tab-content" id="tab-json"><pre id="json-preview"></pre></div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions" id="actions" style="display:none;">
+      <button class="btn-add-task" onclick="addTask()">+ Add task</button>
+      <button class="btn-save" onclick="save()">Save to Snowflake</button>
+      <button class="btn-delete" onclick="del()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="status"></div>
+
+<script>
+// extend helper - from modules/Inheritance.js
+function extend(type, supertype){
+    for(var member in supertype.prototype)
+        if(!type.prototype[member])
+            type.prototype[member] = supertype.prototype[member];
+}
+</script>
+<script src="LayoutEngine.js"></script>
+<script>console.log("SANITY CHECK - after LayoutEngine");</script>
+<script>
+console.log("SCRIPT STARTED");
+
+// --- State ---
+let workflows = [];
+let current = null;        // workflow name
+let data = null;           // parsed workflow JSON
+let selectedTask = 0;      // index into data.TASKS
+let dirty = false;
+let nodeMap = {};          // id -> LayoutEngine Node
+let nodes = [];            // all nodes (tasks + edges)
+let edges = [];            // edge objects
+let svgEl, svgNS;
+
+// --- LayoutEngine init ---
+LayoutEngine.init();
+LayoutEngine.layout = LayoutEngine.simpleLayout;
+
+// --- API helpers ---
+async function api(url, opts = {}) {
+  try {
+    let res = await fetch(url, opts);
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+  } catch (e) { showStatus(e.message, 'error'); throw e; }
+}
+
+async function loadWorkflows() {
+  workflows = await api('/api/workflows');
+  renderSidebar();
+  // Auto-select first workflow if none selected
+  if (workflows.length > 0 && !current) {
+    selectWorkflow(workflows[0].name);
+  }
+}
+
+async function loadWorkflow(name) {
+  let wf = await api('/api/workflows/' + encodeURIComponent(name));
+  current = wf.name;
+  data = JSON.parse(wf.content);
+  data.TASKS = data.TASKS || [];
+  selectedTask = 0;
+  dirty = false;
+  renderEditor();
+}
+
+async function saveWorkflow() {
+  await api('/api/workflows/' + encodeURIComponent(current), {
+    method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+  });
+  dirty = false;
+  showStatus('Saved', 'success');
+  loadWorkflows();
+}
+
+async function deleteWorkflow() {
+  if (!confirm('Delete "' + current + '"?')) return;
+  await api('/api/workflows/' + encodeURIComponent(current), { method: 'DELETE' });
+  current = null; data = null;
+  showStatus('Deleted', 'success');
+  loadWorkflows();
+  hideEditor();
+}
+
+// --- UI render ---
+function renderSidebar() {
+  let list = document.getElementById('workflow-list');
+  list.innerHTML = workflows.map(w => `<div class="workflow-item${w.name===current?' active':''}" onclick="selectWorkflow('${w.name}')">${w.name}</div>`).join('');
+}
+
+function showEditor() {
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('editor').style.display = '';
+  document.getElementById('actions').style.display = '';
+}
+
+function hideEditor() {
+  document.getElementById('empty-state').style.display = '';
+  document.getElementById('editor').style.display = 'none';
+  document.getElementById('actions').style.display = 'none';
+}
+
+async function selectWorkflow(name) {
+  await loadWorkflow(name);
+  renderSidebar();
+}
+
+function newWorkflow() {
+  current = '__new__';
+  data = { WORKFLOW: 'NewWorkflow', WAREHOUSE: 'COMPUTE_WH', TASK_TIMEOUT: 3600000, MAX_FAILURES: 3, TASKS: [] };
+  selectedTask = 0;
+  dirty = true;
+  showEditor();
+  renderSidebar();
+  renderEditor();
+}
+
+function showStatus(msg, type) {
+  let s = document.getElementById('status');
+  s.textContent = msg;
+  s.className = 'show ' + (type || 'success');
+  setTimeout(() => s.className = '', 2000);
+}
+
+// --- Editor ---
+function renderEditor() {
+  if (!data) return;
+  showEditor();
+  document.getElementById('wf-name').value = data.WORKFLOW || '';
+  document.getElementById('wf-wh').value = data.WAREHOUSE || '';
+  document.getElementById('wf-timeout').value = data.TASK_TIMEOUT || 3600000;
+  document.getElementById('wf-max-fail').value = data.MAX_FAILURES || 3;
+  document.getElementById('wf-config').value = data.CONFIG || '';
+
+  renderMetrics();
+  renderTaskButtons();
+  renderGraph();
+  switchTab('task');
+}
+
+function renderMetrics() {
+  let tasks = data.TASKS || [];
+  let root = tasks.find(t => t.is_root || t.schedule) || {};
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric"><div class="value">${tasks.length}</div><div class="label">Tasks</div></div>
+    <div class="metric"><div class="value">${root.name || '-'}</div><div class="label">Root</div></div>
+    <div class="metric"><div class="value">${root.schedule || '-'}</div><div class="label">Schedule</div></div>
+  `;
+}
+
+function renderTaskButtons() {
+  let tasks = data.TASKS || [];
+  document.getElementById('task-buttons').innerHTML = tasks.map((t, i) =>
+    `<button class="task-btn${i===selectedTask?' active':''}" onclick="selectTask(${i})">${t.name || 'task_'+i}</button>`
+  ).join('');
+}
+
+function selectTask(idx) {
+  selectedTask = idx;
+  renderTaskButtons();
+  renderGraph();
+  switchTab('task');
+}
+
+// --- Graph ---
+function renderGraph() {
+  let tasks = data.TASKS || [];
+  let container = document.getElementById('graph-container');
+  svgEl = document.getElementById('graph-svg');
+  if (!svgEl) {
+    svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svgEl.id = 'graph-svg';
+    svgEl.setAttribute('viewBox', '0 0 800 450');
+    svgEl.setAttribute('width', '100%');
+    svgEl.setAttribute('height', '100%');
+    svgEl.style.display = 'block';
+    container.appendChild(svgEl);
+  }
+
+  LayoutEngine.init();
+  LayoutEngine.layout = LayoutEngine.simpleLayout;
+  nodes = [];
+  nodeMap = {};
+  edges = [];
+  svgNS = 'http://www.w3.org/2000/svg';
+
+  tasks.forEach((t, i) => {
+    let angle = (i / Math.max(tasks.length, 1)) * 2 * Math.PI;
+    let px = t._x != null ? t._x : (400 + Math.cos(angle) * 150);
+    let py = t._y != null ? t._y : (225 + Math.sin(angle) * 100);
+    let node = new Node(t.name || ('task_'+i), px, py, t.is_root ? NodeType.ROOT_TASK : NodeType.TASK);
+    node.label = t.name; node.isRoot = t.is_root; node.description = t.description;
+    nodes.push(node);
+    nodeMap[t.name || ('task_'+i)] = node;
+  });
+
+  let eid = 1000;
+  tasks.forEach((t, i) => {
+    (t.after || []).forEach(a => {
+      let src = nodeMap[a.name], tgt = nodeMap[t.name || ('task_'+i)];
+      if (src && tgt) {
+        let edge = new Edge(eid++, src, tgt);
+        edges.push(edge);
+        nodes.push(edge);
+      }
+    });
+  });
+
+  // Only run layout if nodes don't have saved positions
+  let allSaved = tasks.every(t => t._x != null && t._y != null);
+  if (!allSaved) {
+    LayoutEngine.equilibrium = false;
+    for (let i = 0; i < 80 && !LayoutEngine.equilibrium; i++) {
+      LayoutEngine.layout(nodes);
+    }
+    updatePositions();
+  }
+  drawGraph();
+
+function drawGraph() {
+  let tasks = data.TASKS || [];
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+
+  function ce(tag, attrs) {
+    let el = document.createElementNS(svgNS, tag);
+    for (let k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  edges.forEach(edge => {
+    let src = edge.node, tgt = edge.otherNode;
+    svgEl.appendChild(ce('path', { class: 'edge-line',
+      d: `M${src.xPosition},${src.yPosition} Q${edge.xPosition},${edge.yPosition} ${tgt.xPosition},${tgt.yPosition}`
+    }));
+    let dx = tgt.xPosition - edge.xPosition, dy = tgt.yPosition - edge.yPosition, len = Math.sqrt(dx*dx+dy*dy)||1;
+    let ux = dx/len, uy = dy/len, nr = tgt.isRoot?22:18;
+    let tipX = tgt.xPosition - ux*(nr+2), tipY = tgt.yPosition - uy*(nr+2), aSize = 8;
+    let bX = tipX - ux*aSize, bY = tipY - uy*aSize, pX = -uy*aSize*0.5, pY = ux*aSize*0.5;
+    svgEl.appendChild(ce('polygon', { points: `${tipX},${tipY} ${bX+pX},${bY+pY} ${bX-pX},${bY-pY}`, fill: '#4a9eff' }));
+  });
+
+  tasks.forEach((t, i) => {
+    let node = nodeMap[t.name || ('task_'+i)];
+    if (!node) return;
+    let r = node.isRoot ? 22 : 18;
+    let isSel = (i === selectedTask);
+    let circle = ce('circle', {
+      class: 'node-circle' + (node.isRoot?' root-node':'') + (isSel?' node-selected':''),
+      cx: node.xPosition, cy: node.yPosition, r: r,
+      fill: node.isRoot ? '#1a5c1a' : '#1a3a5c',
+      stroke: isSel ? '#ff6b6b' : (node.isRoot ? '#ffd700' : '#4a9eff'),
+      'stroke-width': isSel ? 4 : (node.isRoot ? 2.5 : 1.5)
+    });
+    circle.addEventListener('dblclick', function() {
+      let idx = tasks.findIndex(tk => (tk.name || ('task_'+i)) === (t.name || ('task_'+i)));
+      if (idx >= 0) selectTask(idx);
+    });
+    svgEl.appendChild(circle);
+    let label = ce('text', { class: 'node-label', x: node.xPosition, y: node.yPosition + r + 14 });
+    label.textContent = t.name || ('task_'+i);
+    svgEl.appendChild(label);
+  });
+}
+
+// --- Drag ---
+let dragNode = null, dragStart = null, isDragging = false;
+let DRAG_THRESHOLD = 5;
+let svgEl, svgNS;
+
+function screenToSVG(x, y) {
+  if (!svgEl) return {x: x, y: y};
+  let rect = svgEl.getBoundingClientRect();
+  let vb = svgEl.viewBox.baseVal;
+  return { x: (x - rect.left) * vb.width / rect.width, y: (y - rect.top) * vb.height / rect.height };
+}
+
+function findNodeByXY(x, y) {
+  for (let id in nodeMap) {
+    let n = nodeMap[id];
+    if (Math.abs(n.xPosition - x) < 20 && Math.abs(n.yPosition - y) < 20) return n;
+  }
+  return null;
+}
+
+function updatePositions() {
+  let tasks = data.TASKS || [];
+  for (let i = 0; i < tasks.length; i++) {
+    let n = nodeMap[tasks[i].name || ('task_'+i)];
+    if (n) { tasks[i]._x = n.xPosition; tasks[i]._y = n.yPosition; }
+  }
+  dirty = true;
+}
+
+document.addEventListener('mousedown', function(e) {
+  if (e.target.classList.contains('node-circle')) {
+    let cx = parseFloat(e.target.getAttribute('cx'));
+    let cy = parseFloat(e.target.getAttribute('cy'));
+    dragNode = findNodeByXY(cx, cy);
+    if (dragNode) {
+      dragStart = { x: e.clientX, y: e.clientY };
+      isDragging = false;
+      e.preventDefault();
+    }
+  }
+});
+
+document.addEventListener('mousemove', function(e) {
+  if (!dragNode) return;
+  if (!isDragging) {
+    if (Math.max(Math.abs(e.clientX - dragStart.x), Math.abs(e.clientY - dragStart.y)) < DRAG_THRESHOLD) return;
+    isDragging = true;
+  }
+  let pt = screenToSVG(e.clientX, e.clientY);
+  dragNode.xPosition = pt.x;
+  dragNode.yPosition = pt.y;
+  dragNode.xVelocity = 0;
+  dragNode.yVelocity = 0;
+  updatePositions();
+  drawGraph();
+});
+
+document.addEventListener('mouseup', function() {
+  dragNode = null;
+  isDragging = false;
+});
+
+// --- Forms ---
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase().includes(name)));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id.includes(name)));
+  if (name === 'task') renderTaskForm();
+  if (name === 'steps') renderStepsForm();
+  if (name === 'json') renderJsonPreview();
+}
+
+function renderTaskForm() {
+  let tasks = data.TASKS || [];
+  if (!tasks.length) {
+    document.getElementById('tab-task').innerHTML = '<p style="color:#888;padding:1rem;">No tasks. Click "+ Add task".</p>';
+    return;
+  }
+  let t = tasks[selectedTask] || tasks[0];
+  document.getElementById('tab-task').innerHTML = `
+    <div class="form-grid">
+      <div class="form-group"><label>Task name</label><input id="f-name" value="${esc(t.name||'')}" oninput="syncTask()"/></div>
+      <div class="form-group"><label>Schedule (cron)</label><input id="f-sched" value="${esc(t.schedule||'')}" placeholder="USING CRON 0 2 * * * UTC" oninput="syncTask()"/></div>
+      <div class="form-group"><label>Description</label><textarea id="f-desc" oninput="syncTask()">${esc(t.description||'')}</textarea></div>
+      <div class="form-group">
+        <label>State</label><select id="f-state" onchange="syncTask()">
+          <option ${t.state==='suspended'?'selected':''}>suspended</option>
+          <option ${t.state==='running'?'selected':''}>running</option>
+        </select>
+      </div>
+      <div class="form-group"><label><input type="checkbox" id="f-root" ${t.is_root?'checked':''} onchange="syncTask()"> Is root task</label></div>
+      <div class="form-group">
+        <label>Run after (predecessors)</label>
+        <div id="f-after"></div>
+      </div>
+    </div>
+    <button onclick="removeTask()" style="margin-top:0.5rem;color:#cf222e;border:1px solid #cf222e;background:none;padding:0.3rem 0.8rem;border-radius:6px;cursor:pointer;">Remove this task</button>
+  `;
+  // Render multi-select for after
+  let allNames = tasks.map((tk, i) => i !== selectedTask ? tk.name : null).filter(Boolean);
+  let after = (t.after || []).map(a => a.name);
+  document.getElementById('f-after').innerHTML = allNames.map(n =>
+    `<label style="display:block;font-size:0.8rem;"><input type="checkbox" value="${n}" ${after.includes(n)?'checked':''} onchange="syncTask()"> ${n}</label>`
+  ).join('');
+}
+
+function syncTask() {
+  let tasks = data.TASKS || [];
+  let t = tasks[selectedTask] || tasks[0];
+  let fName = document.getElementById('f-name');
+  if (fName) t.name = fName.value;
+  let fSched = document.getElementById('f-sched');
+  if (fSched) t.schedule = fSched.value || null;
+  let fDesc = document.getElementById('f-desc');
+  if (fDesc) t.description = fDesc.value;
+  let fState = document.getElementById('f-state');
+  if (fState) t.state = fState.value;
+  let fRoot = document.getElementById('f-root');
+  if (fRoot) t.is_root = fRoot.checked;
+  let checks = document.querySelectorAll('#f-after input[type=checkbox]');
+  if (checks.length) {
+    t.after = Array.from(checks).filter(c => c.checked).map(c => ({name: c.value}));
+    if (!t.after.length) t.after = null;
+  }
+  dirty = true;
+  renderTaskButtons();
+  renderGraph();
+}
+
+function syncForm() {
+  data.WORKFLOW = document.getElementById('wf-name').value;
+  data.WAREHOUSE = document.getElementById('wf-wh').value;
+  data.TASK_TIMEOUT = parseInt(document.getElementById('wf-timeout').value) || 3600000;
+  data.MAX_FAILURES = parseInt(document.getElementById('wf-max-fail').value) || 3;
+  data.CONFIG = document.getElementById('wf-config').value || null;
+  dirty = true;
+}
+
+// --- Steps ---
+const STEP_TYPES = ['proc', 'sql', 'lineage', 'rows', 'return_value'];
+const STEP_BADGES = { proc: 'badge-proc', sql: 'badge-sql', lineage: 'badge-lineage', rows: 'badge-rows', return_value: 'badge-return_value' };
+
+function renderStepsForm() {
+  let tasks = data.TASKS || [];
+  if (!tasks.length) { document.getElementById('tab-steps').innerHTML = '<p style="color:#888;padding:1rem;">No tasks to show steps for.</p>'; return; }
+  let t = tasks[selectedTask] || tasks[0];
+  let steps = t.steps || [];
+  document.getElementById('tab-steps').innerHTML = `
+    <div id="steps-container">${steps.map((s, i) => stepHTML(s, i)).join('')}</div>
+    <div style="margin-top:0.5rem;display:flex;gap:0.5rem;">
+      <button onclick="addStep()">+ Add step</button>
+      ${steps.length ? '<button onclick="removeLastStep()">Remove last</button>' : ''}
+    </div>
+  `;
+}
+
+function stepHTML(step, i) {
+  let type = step.type || 'proc';
+  return `
+    <div class="step ${step._open?'open':''}" id="step-${i}">
+      <div class="step-header" onclick="toggleStep(${i})">
+        <span class="badge ${STEP_BADGES[type]||''}">${type}</span>
+        <span style="flex:1">Step ${i+1}: ${esc(step.description || 'Untitled')}</span>
+      </div>
+      <div class="step-body">
+        <div class="form-grid">
+          <div class="form-group"><label>Type</label><select onchange="syncStep(${i})" id="s${i}-type">
+            ${STEP_TYPES.map(st => `<option ${st===type?'selected':''}>${st}</option>`).join('')}
+          </select></div>
+          <div class="form-group"><label>Description</label><input id="s${i}-desc" value="${esc(step.description||'')}" oninput="syncStep(${i})"/></div>
+        </div>
+        ${stepSpecificFields(step, i)}
+      </div>
+    </div>
+  `;
+}
+
+function stepSpecificFields(step, i) {
+  let t = step.type || 'proc';
+  if (t === 'proc') return `<div class="form-group full"><label>Procedure call</label><input id="s${i}-call" value="${esc(step.call||'')}" oninput="syncStep(${i})" placeholder="schema.sp_name()"/></div>`;
+  if (t === 'sql') return `
+    <div class="form-grid">
+      <div class="form-group"><label>Source</label><input id="s${i}-src" value="${esc((step.lineage||{}).source||'')}" oninput="syncStep(${i})"/></div>
+      <div class="form-group"><label>Target</label><input id="s${i}-tgt" value="${esc((step.lineage||{}).target||'')}" oninput="syncStep(${i})"/></div>
+    </div>
+    <div class="form-group full"><label>SQL</label><textarea id="s${i}-sql" oninput="syncStep(${i})" style="min-height:80px;">${esc(step.sql||'')}</textarea></div>
+  `;
+  if (t === 'lineage') return `
+    <div class="form-grid">
+      <div class="form-group"><label>Source</label><input id="s${i}-src" value="${esc(step.source||'')}" oninput="syncStep(${i})"/></div>
+      <div class="form-group"><label>Target</label><input id="s${i}-tgt" value="${esc(step.target||'')}" oninput="syncStep(${i})"/></div>
+    </div>
+  `;
+  if (t === 'rows') {
+    let fields = ['inserted','updated','deleted','merged'];
+    return '<div class="form-grid">' + fields.map(f => '<div class="form-group"><label>' + f + '</label><input type="number" id="s' + i + '-' + f + '" value="' + (step[f]||0) + '" oninput="syncStep(' + i + ')"/></div>').join('') + '</div>';
+  }
+  if (t === 'return_value') return `<div class="form-group full"><label>Message</label><input id="s${i}-msg" value="${esc(step.message||'')}" oninput="syncStep(${i})"/></div>`;
+  return '';
+}
+
+function toggleStep(i) {
+  let t = data.TASKS[selectedTask];
+  let steps = t.steps || [];
+  steps[i]._open = !steps[i]._open;
+  renderStepsForm();
+}
+
+function syncStep(i) {
+  let t = data.TASKS[selectedTask];
+  let s = t.steps[i];
+  s.type = getId(`s${i}-type`).value;
+  s.description = getId(`s${i}-desc`).value;
+  if (s.type === 'proc') s.call = getId(`s${i}-call`).value;
+  if (s.type === 'sql') {
+    s.sql = getId(`s${i}-sql`).value;
+    s.lineage = { source: getId(`s${i}-src`).value, target: getId(`s${i}-tgt`).value };
+  }
+  if (s.type === 'lineage') { s.source = getId(`s${i}-src`).value; s.target = getId(`s${i}-tgt`).value; }
+  if (s.type === 'rows') ['inserted','updated','deleted','merged'].forEach(f => s[f] = parseInt(getId(`s${i}-${f}`).value)||0);
+  if (s.type === 'return_value') s.message = getId(`s${i}-msg`).value;
+  dirty = true;
+  renderStepsForm();
+}
+
+function addStep() {
+  let t = data.TASKS[selectedTask];
+  t.steps = t.steps || [];
+  t.steps.push({ type: 'proc', description: '' });
+  dirty = true;
+  renderStepsForm();
+}
+
+function removeLastStep() {
+  let t = data.TASKS[selectedTask];
+  if (t.steps && t.steps.length) { t.steps.pop(); dirty = true; renderStepsForm(); }
+}
+
+function addTask() {
+  data.TASKS.push({ name: 'new_task', description: '', steps: [], after: [] });
+  selectedTask = data.TASKS.length - 1;
+  dirty = true;
+  renderEditor();
+}
+
+function removeTask() {
+  data.TASKS.splice(selectedTask, 1);
+  selectedTask = Math.max(0, Math.min(selectedTask, data.TASKS.length - 1));
+  dirty = true;
+  renderEditor();
+}
+
+function renderJsonPreview() {
+  document.getElementById('json-preview').textContent = JSON.stringify(data, null, 2);
+}
+
+function save() {
+  if (current === '__new__' || !current) {
+    current = data.WORKFLOW || 'Untitled';
+  }
+  data.WORKFLOW = current;
+  updatePositions();
+  saveWorkflow();
+}
+
+function del() { deleteWorkflow(); }
+
+// --- Helpers ---
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(new RegExp('\"','g'),'&quot;'); }
+function getId(id) { return document.getElementById(id); }
+
+// Start app
+console.log('Calling loadWorkflows...');
+loadWorkflows().catch(e => console.error('loadWorkflows failed:', e));
+}
+</script>
+</body>
+</html>

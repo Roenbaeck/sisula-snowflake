@@ -5,3 +5,4 @@ snowflake_cli_setup.png
 /examples-mssql
 /streamlit/output
 local/.venv/
+/local/__pycache__

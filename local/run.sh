@@ -2,10 +2,13 @@
 # Run the Workflow Editor locally
 # Usage: ./run.sh <connection_name>
 #
-# Reads connection details from ~/.snowflake/config.toml
+# Reads connection details from ~/.snowflake/config.toml or
+# ~/Library/Application Support/snowflake/config.toml
 # Automatically creates a virtual environment on first run.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <connection_name>"
@@ -25,9 +28,7 @@ for p in paths:
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-echo "=== Workflow Editor (local) ==="
+echo "=== Workflow Editor ==="
 echo "Connection: $1"
 echo ""
 
@@ -41,11 +42,15 @@ if [ ! -f "$VENV_DIR/bin/python3" ]; then
     echo "Installing dependencies..."
     "$VENV_DIR/bin/pip" install -q -r requirements.txt
 else
-    # Verify dependencies are installed
     "$VENV_DIR/bin/pip" install -q -r requirements.txt 2>/dev/null || {
         echo "Installing missing dependencies..."
         "$VENV_DIR/bin/pip" install -r requirements.txt
     }
 fi
 
-SNOWFLAKE_CONNECTION="$1" "$VENV_DIR/bin/streamlit" run edit_workflow.py
+PORT=${PORT:-8000}
+echo "Starting server on http://localhost:$PORT"
+echo "Press Ctrl+C to stop."
+echo ""
+
+SNOWFLAKE_CONNECTION="$1" PORT="$PORT" "$VENV_DIR/bin/python3" server.py
