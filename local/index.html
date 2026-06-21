@@ -155,6 +155,49 @@ body { overflow: hidden; }
 }
 #graph-toolbar button:hover { background: rgba(28, 39, 61, 0.86); }
 #graph-toolbar button:disabled { opacity: 0.45; cursor: default; }
+#miniature {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  width: 190px;
+  height: 138px;
+  border-radius: 18px;
+  background: rgba(10, 16, 28, 0.72);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 30px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(10px);
+  z-index: 2;
+  overflow: hidden;
+}
+#miniature svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#miniature .mini-backdrop {
+  fill: rgba(255,255,255,0.02);
+}
+#miniature .mini-edge {
+  stroke: rgba(111, 188, 229, 0.52);
+  stroke-width: 1.35;
+  fill: none;
+}
+#miniature .mini-node {
+  fill: rgba(51, 133, 233, 0.24);
+  stroke: rgba(96, 165, 250, 0.88);
+  stroke-width: 1.3;
+}
+#miniature .mini-node.root {
+  fill: rgba(38, 122, 62, 0.8);
+  stroke: rgba(240, 180, 79, 0.92);
+}
+#miniature .mini-viewport {
+  fill: rgba(255,255,255,0.08);
+  stroke: rgba(255, 226, 178, 0.95);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+#miniature.dragging { cursor: move; }
 #graph-container .node-circle { cursor: pointer; transition: filter 0.15s; }
 #graph-container .node-circle:hover { filter: brightness(1.3); }
 #graph-container .node-selected { stroke: #ff6b6b !important; stroke-width: 4 !important; }
@@ -377,6 +420,12 @@ button[onclick="removeTask()"] {
 @media (max-width: 640px) {
   #sidebar h3 { font-size: 1.55rem; }
   #graph-toolbar { right: 0.75rem; left: 0.75rem; }
+  #miniature {
+    width: 150px;
+    height: 110px;
+    right: 0.75rem;
+    bottom: 0.75rem;
+  }
   .tab-content { padding: 1rem; }
   .task-btn { width: 100%; justify-content: center; }
 }
@@ -404,6 +453,9 @@ button[onclick="removeTask()"] {
             <button type="button" id="btn-layout-toggle" onclick="toggleLayoutEngine()">Play</button>
             <button type="button" id="btn-release-fixed" onclick="releaseFixedNodes()">Release fixed</button>
             <button type="button" onclick="resetViewport()">Reset view</button>
+          </div>
+          <div id="miniature">
+            <svg id="mini-svg" viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet" aria-label="Graph navigator"></svg>
           </div>
         </div>
         <div id="props">
@@ -474,7 +526,9 @@ let nodeMap = {};          // id -> LayoutEngine Node
 let nodes = [];            // all nodes (tasks + edges)
 let edges = [];            // edge objects
 let svgEl, svgNS;
+let miniSvgEl;
 let panState = { active: false, lastX: 0, lastY: 0, scaleX: 1, scaleY: 1 };
+let miniNavState = { active: false, lastX: 0, lastY: 0, scaleX: 1, scaleY: 1 };
 
 const DEFAULT_VIEWBOX = { x: 0, y: 0, width: 800, height: 450 };
 
@@ -569,6 +623,7 @@ function setViewBox(x, y, width, height, persist) {
     layoutState.viewport = { x, y, width, height };
     persistLayoutState();
   }
+  drawMiniMap();
 }
 
 function currentViewBox() {
@@ -618,6 +673,135 @@ function updateGraphToolbar() {
   if (release) release.disabled = !Object.values(nodeMap).some((node) => node.fixed);
 }
 
+function getGraphBounds() {
+  let graphNodes = nodes.filter((node) => node && node.type !== NodeType.EDGE);
+  if (!graphNodes.length) {
+    let viewBox = currentViewBox();
+    return { x: viewBox.x, y: viewBox.y, width: viewBox.width, height: viewBox.height };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  graphNodes.forEach((node) => {
+    minX = Math.min(minX, node.xPosition);
+    minY = Math.min(minY, node.yPosition);
+    maxX = Math.max(maxX, node.xPosition);
+    maxY = Math.max(maxY, node.yPosition);
+  });
+  let pad = 70;
+  let width = Math.max(1, maxX - minX);
+  let height = Math.max(1, maxY - minY);
+  return {
+    x: minX - pad,
+    y: minY - pad,
+    width: width + pad * 2,
+    height: height + pad * 2,
+  };
+}
+
+function ensureMiniSvg() {
+  if (!miniSvgEl) {
+    miniSvgEl = document.getElementById('mini-svg');
+    if (miniSvgEl) {
+      miniSvgEl.addEventListener('mousedown', beginMiniNavigation);
+    }
+  }
+  return miniSvgEl;
+}
+
+function drawMiniMap() {
+  let miniatureSvg = ensureMiniSvg();
+  if (!miniatureSvg) return;
+  while (miniatureSvg.firstChild) miniatureSvg.removeChild(miniatureSvg.firstChild);
+
+  let bounds = getGraphBounds();
+  miniatureSvg.setAttribute('viewBox', `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`);
+
+  function mini(tag, attrs) {
+    let el = document.createElementNS(svgNS, tag);
+    for (let key in attrs) el.setAttribute(key, attrs[key]);
+    return el;
+  }
+
+  miniatureSvg.appendChild(mini('rect', {
+    class: 'mini-backdrop',
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    rx: 24,
+    ry: 24,
+  }));
+
+  edges.forEach((edge) => {
+    let src = edge.node;
+    let tgt = edge.otherNode;
+    miniatureSvg.appendChild(mini('path', {
+      class: 'mini-edge',
+      d: `M${src.xPosition},${src.yPosition} Q${edge.xPosition},${edge.yPosition} ${tgt.xPosition},${tgt.yPosition}`,
+    }));
+  });
+
+  let tasks = data.TASKS || [];
+  tasks.forEach((task, index) => {
+    let node = nodeMap[taskId(task, index)];
+    if (!node) return;
+    miniatureSvg.appendChild(mini('circle', {
+      class: 'mini-node' + (node.isRoot ? ' root' : ''),
+      cx: node.xPosition,
+      cy: node.yPosition,
+      r: node.isRoot ? 12 : 8,
+    }));
+  });
+
+  let viewBox = currentViewBox();
+  miniatureSvg.appendChild(mini('rect', {
+    class: 'mini-viewport',
+    x: viewBox.x,
+    y: viewBox.y,
+    width: viewBox.width,
+    height: viewBox.height,
+    rx: 10,
+    ry: 10,
+  }));
+}
+
+function screenToMiniature(x, y) {
+  let miniatureSvg = ensureMiniSvg();
+  if (!miniatureSvg) return { x, y };
+  let point = miniatureSvg.createSVGPoint();
+  point.x = x;
+  point.y = y;
+  let matrix = miniatureSvg.getScreenCTM();
+  return matrix ? point.matrixTransform(matrix.inverse()) : { x, y };
+}
+
+function centerViewAt(x, y) {
+  let viewBox = currentViewBox();
+  setViewBox(x - viewBox.width / 2, y - viewBox.height / 2, viewBox.width, viewBox.height);
+}
+
+function beginMiniNavigation(e) {
+  if (e.button !== 0) return;
+  let miniatureSvg = ensureMiniSvg();
+  if (!miniatureSvg) return;
+  let container = document.getElementById('miniature');
+  if (!container) return;
+  let rect = container.getBoundingClientRect();
+  let viewBox = miniatureSvg.viewBox.baseVal;
+  miniNavState.active = true;
+  miniNavState.scaleX = (viewBox.width || rect.width) / Math.max(rect.width, 1);
+  miniNavState.scaleY = (viewBox.height || rect.height) / Math.max(rect.height, 1);
+  miniNavState.lastX = e.clientX;
+  miniNavState.lastY = e.clientY;
+  let point = screenToMiniature(e.clientX, e.clientY);
+  centerViewAt(point.x, point.y);
+  container.classList.add('dragging');
+  e.preventDefault();
+  e.stopPropagation();
+}
+
 const DrawingEngine = {
   drawId: null,
   running: false,
@@ -655,6 +839,7 @@ const DrawingEngine = {
       updatePositions(false);
     }
     drawGraph();
+    drawMiniMap();
     if (LayoutEngine.equilibrium) {
       this.stop();
       return;
@@ -818,6 +1003,7 @@ function renderGraph() {
     svgEl.addEventListener('mousedown', beginPanning);
     svgEl.addEventListener('wheel', zoomGraph, { passive: false });
   }
+  ensureMiniSvg();
   applyStoredViewport();
 
   LayoutEngine.init();
@@ -860,6 +1046,7 @@ function renderGraph() {
   });
   let shouldLayout = needsInitialLayout || !allSaved;
   drawGraph();
+  drawMiniMap();
   needsInitialLayout = false;
   updateGraphToolbar();
   if (shouldLayout) {
@@ -1050,6 +1237,21 @@ document.addEventListener('mousedown', function(e) {
 });
 
 document.addEventListener('mousemove', function(e) {
+  if (miniNavState.active) {
+    let miniatureSvg = ensureMiniSvg();
+    if (!miniatureSvg) return;
+    let viewBox = currentViewBox();
+    setViewBox(
+      viewBox.x + (e.clientX - miniNavState.lastX) * miniNavState.scaleX,
+      viewBox.y + (e.clientY - miniNavState.lastY) * miniNavState.scaleY,
+      viewBox.width,
+      viewBox.height
+    );
+    miniNavState.lastX = e.clientX;
+    miniNavState.lastY = e.clientY;
+    e.preventDefault();
+    return;
+  }
   if (panState.active && svgEl) {
     let viewBox = currentViewBox();
     setViewBox(
@@ -1082,6 +1284,10 @@ document.addEventListener('mousemove', function(e) {
 });
 
 document.addEventListener('mouseup', function() {
+  if (miniNavState.active) {
+    miniNavState.active = false;
+    document.getElementById('miniature')?.classList.remove('dragging');
+  }
   if (panState.active && svgEl) {
     panState.active = false;
     svgEl.style.cursor = 'default';
