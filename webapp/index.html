@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Workflow Editor Offline</title>
+<title>Snowflake Workflower</title>
 <style>
 :root {
   --bg-ink: #17212f;
@@ -59,11 +59,24 @@ body { overflow: hidden; }
   border-right: 1px solid rgba(255,255,255,0.06);
   box-shadow: inset -1px 0 0 rgba(255,255,255,0.04);
 }
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+.sidebar-logo {
+  width: 3.3rem;
+  height: 3.3rem;
+  flex: 0 0 auto;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(13, 22, 38, 0.28));
+}
 #sidebar h3 {
   font: 700 1.9rem/1.05 "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   color: #f4efe8;
   letter-spacing: -0.04em;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0;
 }
 #sidebar button { width: 100%; padding: 0.8rem 1rem; border: none; border-radius: var(--radius-md); cursor: pointer; font: inherit; }
 #sidebar .btn-new {
@@ -647,6 +660,11 @@ button[onclick="removeTask()"] {
 }
 
 @media (max-width: 640px) {
+  .sidebar-brand { gap: 0.65rem; }
+  .sidebar-logo {
+    width: 2.8rem;
+    height: 2.8rem;
+  }
   #sidebar h3 { font-size: 1.55rem; }
   #graph-toolbar { right: 0.75rem; left: 0.75rem; }
   #miniature {
@@ -664,7 +682,10 @@ button[onclick="removeTask()"] {
 <div id="app">
   <!-- Sidebar -->
   <div id="sidebar">
-    <h3>Workflows</h3>
+    <div class="sidebar-brand">
+      <img class="sidebar-logo" src="Snowflower.png" alt="Snowflake Workflower logo"/>
+      <h3>Snowflake Workflower</h3>
+    </div>
     <button class="btn-new" onclick="newWorkflow()">+ New workflow</button>
     <div class="sidebar-tools">
       <button class="btn-utility" type="button" onclick="triggerWorkflowImport()">Import workflow JSON</button>
