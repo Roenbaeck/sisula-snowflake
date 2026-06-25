@@ -345,12 +345,142 @@ body { overflow: hidden; }
   padding-top: 0.2rem;
 }
 /* Steps */
-.step { border: 1px solid rgba(37, 48, 62, 0.12); border-radius: var(--radius-lg); margin-bottom: 0.75rem; overflow: hidden; background: rgba(255,255,255,0.58); box-shadow: inset 0 1px 0 rgba(255,255,255,0.55); }
-.step-header { display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.95rem; cursor: pointer; background: rgba(240, 233, 219, 0.62); }
+.step { position: relative; border: 1px solid rgba(37, 48, 62, 0.12); border-radius: var(--radius-lg); margin-bottom: 0.75rem; overflow: hidden; background: rgba(255,255,255,0.58); box-shadow: inset 0 1px 0 rgba(255,255,255,0.55); transition: transform 0.14s ease, opacity 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease, background 0.14s ease; }
+.step-header { display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.95rem; cursor: pointer; background: rgba(240, 233, 219, 0.62); transition: background 0.14s ease; }
 .step-header:hover { background: rgba(235, 228, 214, 0.86); }
+.step.dragging {
+  opacity: 0.92;
+  transform: scale(1.015);
+  z-index: 2;
+  border-color: rgba(47, 143, 131, 0.55);
+  background: rgba(255, 252, 247, 0.98);
+  box-shadow: 0 18px 32px rgba(20, 18, 15, 0.14), 0 0 0 3px rgba(47, 143, 131, 0.18);
+}
+.step.dragging .step-header {
+  background: linear-gradient(135deg, rgba(233, 248, 244, 0.96), rgba(247, 241, 231, 0.96));
+}
+.step.dragging::before {
+  content: "Dragging";
+  position: absolute;
+  right: 0.9rem;
+  top: 0.55rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #c18b3c 0%, #9b6423 100%);
+  color: #fffaf3;
+  font: 700 0.68rem/1 "Avenir Next", sans-serif;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  box-shadow: 0 10px 18px rgba(155, 100, 35, 0.22);
+}
+.step.drop-before,
+.step.drop-after {
+  border-color: rgba(47, 143, 131, 0.5);
+  background: rgba(244, 252, 249, 0.96);
+  box-shadow: 0 10px 22px rgba(30, 56, 68, 0.08), 0 0 0 2px rgba(47, 143, 131, 0.12);
+}
+.step.drop-before .step-header,
+.step.drop-after .step-header {
+  background: rgba(229, 245, 241, 0.96);
+}
+.step.drop-before::before,
+.step.drop-after::before {
+  position: absolute;
+  right: 0.9rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2f8f83 0%, #256f66 100%);
+  color: #f6fffd;
+  font: 700 0.68rem/1 "Avenir Next", sans-serif;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  box-shadow: 0 10px 18px rgba(37, 111, 102, 0.2);
+}
+.step.drop-before::after,
+.step.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 0.9rem;
+  right: 0.9rem;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(47, 143, 131, 0.18), rgba(47, 143, 131, 0.92), rgba(47, 143, 131, 0.18));
+  pointer-events: none;
+}
+.step.drop-before::before {
+  content: "Drop before";
+  top: 0.55rem;
+}
+.step.drop-before::after {
+  top: 0.42rem;
+}
+.step.drop-after::before {
+  content: "Drop after";
+  bottom: 0.55rem;
+}
+.step.drop-after::after {
+  bottom: 0.42rem;
+}
+.step-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: rgba(28, 36, 48, 0.08);
+  color: var(--text-soft);
+  cursor: grab;
+  user-select: none;
+  font: 700 0.82rem/1 "Avenir Next", sans-serif;
+  letter-spacing: 0.12em;
+  transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
+}
+.step-drag-handle:hover { background: rgba(28, 36, 48, 0.12); color: var(--text-main); }
+.step-drag-handle:active { cursor: grabbing; }
+body.step-drag-active .step-drag-handle {
+  cursor: grabbing;
+}
+body.step-drag-active .step:not(.dragging) {
+  opacity: 0.97;
+}
+body.step-drag-active .step.dragging .step-drag-handle {
+  background: rgba(47, 143, 131, 0.14);
+  color: var(--accent-strong);
+  transform: scale(1.06);
+  box-shadow: 0 0 0 2px rgba(47, 143, 131, 0.16);
+}
 .step-header .badge { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
 .step-body { padding: 0.95rem; display: none; }
 .step.open .step-body { display: block; }
+.step-actions {
+  margin-top: 0.65rem;
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+.step-actions button {
+  padding: 0.68rem 1.05rem;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font: 700 0.92rem/1 "Avenir Next", sans-serif;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.step-actions button:hover {
+  transform: translateY(-1px);
+}
+.step-actions .btn-step-add {
+  background: linear-gradient(135deg, #31b24f 0%, #1f8f65 100%);
+  color: #fff;
+  box-shadow: 0 12px 22px rgba(31, 143, 101, 0.22);
+}
+.step-actions .btn-step-remove {
+  background: linear-gradient(135deg, #fff7ec 0%, #f1e0c3 100%);
+  color: #6f4b16;
+  border: 1px solid rgba(193, 139, 60, 0.28);
+  box-shadow: 0 12px 22px rgba(155, 100, 35, 0.12);
+}
 .badge-proc { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; }
 .badge-sql { background: rgba(34, 197, 94, 0.14); color: #166534; }
 .badge-lineage { background: rgba(245, 158, 11, 0.18); color: #9a5b00; }
@@ -659,6 +789,8 @@ let miniNavState = { active: false, lastX: 0, lastY: 0, scaleX: 1, scaleY: 1 };
 let templateText = '';
 let templateName = '';
 let lastRenderedSql = '';
+let draggedStepIndex = null;
+let stepDragState = null;
 
 const DEFAULT_VIEWBOX = { x: 0, y: 0, width: 800, height: 450 };
 const WORKFLOW_INDEX_KEY = 'sisula-webapp:workflow-index';
@@ -1715,6 +1847,11 @@ document.addEventListener('mousedown', function(e) {
 });
 
 document.addEventListener('mousemove', function(e) {
+  if (stepDragState) {
+    updateStepPointerDrag(e.clientX, e.clientY);
+    e.preventDefault();
+    return;
+  }
   if (miniNavState.active) {
     let miniatureSvg = ensureMiniSvg();
     if (!miniatureSvg) return;
@@ -1762,6 +1899,10 @@ document.addEventListener('mousemove', function(e) {
 });
 
 document.addEventListener('mouseup', function() {
+  if (stepDragState) {
+    finishStepPointerDrag();
+    return;
+  }
   if (miniNavState.active) {
     miniNavState.active = false;
     document.getElementById('miniature')?.classList.remove('dragging');
@@ -1872,11 +2013,15 @@ function renderStepsForm() {
   let steps = t.steps || [];
   document.getElementById('tab-steps').innerHTML = `
     <div id="steps-container">${steps.map((s, i) => stepHTML(s, i)).join('')}</div>
-    <div style="margin-top:0.5rem;display:flex;gap:0.5rem;">
-      <button onclick="addStep()">+ Add step</button>
-      ${steps.length ? '<button onclick="removeLastStep()">Remove last</button>' : ''}
+    <div class="step-actions">
+      <button class="btn-step-add" onclick="addStep()">+ Add step</button>
+      ${steps.length ? '<button class="btn-step-remove" onclick="removeLastStep()">Remove last</button>' : ''}
     </div>
   `;
+}
+
+function stepTitle(step, i) {
+  return 'Step ' + (i + 1) + ': ' + (step.description || 'Untitled');
 }
 
 function stepHTML(step, i) {
@@ -1884,8 +2029,9 @@ function stepHTML(step, i) {
   return `
     <div class="step ${step._open?'open':''}" id="step-${i}">
       <div class="step-header" onclick="toggleStep(${i})">
-        <span class="badge ${STEP_BADGES[type]||''}">${type}</span>
-        <span style="flex:1">Step ${i+1}: ${esc(step.description || 'Untitled')}</span>
+        <span class="step-drag-handle" onmousedown="beginStepPointerDrag(event, ${i})" onclick="event.stopPropagation()" title="Drag to reorder steps">::</span>
+        <span class="badge step-badge ${STEP_BADGES[type]||''}">${type}</span>
+        <span class="step-title" style="flex:1">${esc(stepTitle(step, i))}</span>
       </div>
       <div class="step-body">
         <div class="form-grid">
@@ -1931,9 +2077,115 @@ function toggleStep(i) {
   renderStepsForm();
 }
 
+function updateStepSummary(i) {
+  let t = data.TASKS[selectedTask];
+  let s = t.steps[i];
+  let stepEl = getId(`step-${i}`);
+  if (!stepEl || !s) return;
+  let badgeEl = stepEl.querySelector('.step-badge');
+  let titleEl = stepEl.querySelector('.step-title');
+  if (badgeEl) {
+    badgeEl.className = 'badge step-badge ' + (STEP_BADGES[s.type] || '');
+    badgeEl.textContent = s.type || 'proc';
+  }
+  if (titleEl) {
+    titleEl.textContent = stepTitle(s, i);
+  }
+}
+
+function clearStepDropIndicators() {
+  document.querySelectorAll('#steps-container .step').forEach((stepEl) => {
+    stepEl.classList.remove('dragging', 'drop-before', 'drop-after');
+  });
+}
+
+function stepDropPlacement(i) {
+  if (draggedStepIndex !== null && draggedStepIndex < i) return 'after';
+  return 'before';
+}
+
+function beginStepPointerDrag(event, i) {
+  event.preventDefault();
+  event.stopPropagation();
+  draggedStepIndex = i;
+  stepDragState = { sourceIndex: i, targetIndex: null, placement: 'before' };
+  clearStepDropIndicators();
+  let stepEl = getId(`step-${i}`);
+  if (stepEl) stepEl.classList.add('dragging');
+  document.body.classList.add('step-drag-active');
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'grabbing';
+}
+
+function stepIndexAtPoint(x, y) {
+  let element = document.elementFromPoint(x, y);
+  if (!element || !element.closest) return null;
+  let stepEl = element.closest('#steps-container .step');
+  if (!stepEl) return null;
+  let match = /^step-(\d+)$/.exec(stepEl.id || '');
+  return match ? parseInt(match[1], 10) : null;
+}
+
+function updateStepPointerDrag(x, y) {
+  if (!stepDragState) return;
+  clearStepDropIndicators();
+  let sourceEl = getId(`step-${stepDragState.sourceIndex}`);
+  if (sourceEl) sourceEl.classList.add('dragging');
+
+  let targetIndex = stepIndexAtPoint(x, y);
+  if (targetIndex === null || targetIndex === stepDragState.sourceIndex) {
+    stepDragState.targetIndex = null;
+    return;
+  }
+
+  let placement = stepDropPlacement(targetIndex);
+  stepDragState.targetIndex = targetIndex;
+  stepDragState.placement = placement;
+  let targetEl = getId(`step-${targetIndex}`);
+  if (targetEl) targetEl.classList.add(placement === 'after' ? 'drop-after' : 'drop-before');
+}
+
+function finishStepPointerDrag() {
+  if (!stepDragState) {
+    endStepDrag();
+    return;
+  }
+  let t = data.TASKS[selectedTask];
+  let steps = t.steps || [];
+  if (draggedStepIndex === null || draggedStepIndex < 0 || draggedStepIndex >= steps.length) {
+    endStepDrag();
+    return;
+  }
+  if (stepDragState.targetIndex === null) {
+    endStepDrag();
+    return;
+  }
+  let insertIndex = stepDragState.targetIndex + (stepDragState.placement === 'after' ? 1 : 0);
+  if (draggedStepIndex < insertIndex) insertIndex--;
+  if (insertIndex === draggedStepIndex) {
+    endStepDrag();
+    return;
+  }
+  let moved = steps.splice(draggedStepIndex, 1)[0];
+  steps.splice(insertIndex, 0, moved);
+  setDirty(true);
+  renderStepsForm();
+  endStepDrag();
+}
+
+function endStepDrag() {
+  draggedStepIndex = null;
+  stepDragState = null;
+  clearStepDropIndicators();
+  document.body.classList.remove('step-drag-active');
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+}
+
 function syncStep(i) {
   let t = data.TASKS[selectedTask];
   let s = t.steps[i];
+  let previousType = s.type || 'proc';
   s.type = getId(`s${i}-type`).value;
   s.description = getId(`s${i}-desc`).value;
   if (s.type === 'proc') s.call = getId(`s${i}-call`).value;
@@ -1945,7 +2197,12 @@ function syncStep(i) {
   if (s.type === 'rows') ['inserted','updated','deleted','merged'].forEach(f => s[f] = parseInt(getId(`s${i}-${f}`).value)||0);
   if (s.type === 'return_value') s.message = getId(`s${i}-msg`).value;
   setDirty(true);
-  renderStepsForm();
+  if (previousType !== s.type) {
+    s._open = true;
+    renderStepsForm();
+    return;
+  }
+  updateStepSummary(i);
 }
 
 function addStep() {
