@@ -1783,10 +1783,33 @@ function beginPanning(e) {
   e.preventDefault();
 }
 
+function normalizeWheelDeltas(e) {
+  let scale = 1;
+  if (e.deltaMode === 1) scale = 16;
+  else if (e.deltaMode === 2) scale = Math.max(svgEl ? svgEl.clientHeight : DEFAULT_VIEWBOX.height, 1);
+  return {
+    x: e.deltaX * scale,
+    y: e.deltaY * scale,
+  };
+}
+
 function zoomGraph(e) {
   if (!svgEl) return;
   e.preventDefault();
-  let factor = 1 + (e.deltaY > 0 ? 1 : -1) * 0.03;
+  let deltas = normalizeWheelDeltas(e);
+  if (!e.ctrlKey) {
+    let viewBox = currentViewBox();
+    setViewBox(
+      viewBox.x + deltas.x,
+      viewBox.y + deltas.y,
+      viewBox.width,
+      viewBox.height
+    );
+    return;
+  }
+  let zoomDelta = deltas.y || deltas.x;
+  if (!zoomDelta) return;
+  let factor = Math.exp(zoomDelta * 0.0025);
   let viewBox = currentViewBox();
   let svgPoint = screenToSVG(e.clientX, e.clientY);
   setViewBox(
