@@ -45,6 +45,6 @@ run_step "2. Model (DDL)"      metadata/Install_2_MetadataModel.sql
 run_step "3. Knot values"      metadata/Install_3_InsertKnotValues.sql
 run_step "4. Logging procs"    metadata/Install_4_CreateLoggingProcedures.sql
 run_step "5. Config procs"     metadata/Install_5_ConfigurationProcedures.sql
-seed_template "CreateTaskGraph" "$SCRIPT_DIR/templates/CreateTaskGraph.sql"
+seed_template "CreateTaskGraph" "$SCRIPT_DIR/webapp/templates/CreateTaskGraph.sql"
 
 echo "=== deploy complete ==="

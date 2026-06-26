@@ -536,6 +536,7 @@ body.step-drag-active .step.dragging .step-drag-handle {
 .actions button:hover { transform: translateY(-1px); }
 .actions button:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
 .actions .btn-save { background: linear-gradient(135deg, #31b24f 0%, #1f8f65 100%); color: #fff; box-shadow: 0 14px 26px rgba(31, 143, 101, 0.24); }
+.actions .btn-install { background: linear-gradient(135deg, #1b7bdc 0%, #1758a7 100%); color: #fff; box-shadow: 0 14px 26px rgba(23, 88, 167, 0.24); }
 .actions .btn-render { background: linear-gradient(135deg, #1b7bdc 0%, #1758a7 100%); color: #fff; box-shadow: 0 14px 26px rgba(23, 88, 167, 0.24); }
 .actions .btn-export { background: rgba(255,255,255,0.82); color: #233246; border: 1px solid rgba(35, 50, 70, 0.14); }
 .actions .btn-delete { background: linear-gradient(135deg, #d14842 0%, #b7202f 100%); color: #fff; margin-left: auto; box-shadow: 0 14px 26px rgba(183, 32, 47, 0.2); }
@@ -707,7 +708,7 @@ button[onclick="removeTask()"] {
       <button class="btn-utility" type="button" onclick="triggerWorkflowImport()">Import workflow JSON</button>
       <button class="btn-utility" type="button" onclick="triggerTemplateLoad()">Load template file</button>
       <div class="sidebar-note" id="template-status">Template: not loaded</div>
-      <div class="sidebar-note">Hosted builds auto-load the bundled CreateTaskGraph.sisula template. When opening this page directly as a file, use Load template file.</div>
+      <div class="sidebar-note">Hosted builds auto-load the bundled templates/CreateTaskGraph.sql template. When opening this page directly as a file, use Load template file.</div>
     </div>
     <div id="workflow-list" style="margin-top:0.5rem;"></div>
   </div>
@@ -760,17 +761,18 @@ button[onclick="removeTask()"] {
       <div class="tab-content active" id="tab-task"></div>
       <div class="tab-content" id="tab-steps"></div>
       <div class="tab-content" id="tab-json"><pre id="json-preview"></pre></div>
-      <div class="tab-content" id="tab-sql"><pre id="sql-preview">Load CreateTaskGraph.sisula from this folder, then click Render SQL.</pre></div>
+      <div class="tab-content" id="tab-sql"><pre id="sql-preview">Load templates/CreateTaskGraph.sql, then click Render SQL.</pre></div>
     </div>
 
     <!-- Actions -->
     <div class="actions" id="actions" style="display:none;">
       <button class="btn-add-task" onclick="addTask()">+ Add task</button>
-      <button class="btn-save" id="btn-save-local" onclick="saveLocal()">Save locally</button>
+      <button class="btn-save" id="btn-save-local" onclick="saveLocal()">Save to Snowflake</button>
+      <button class="btn-install" id="btn-install" onclick="install()">Install</button>
       <button class="btn-export" id="btn-export-json" onclick="exportJson()">Export JSON</button>
       <button class="btn-render" id="btn-render-sql" onclick="renderSql()">Render SQL</button>
       <button class="btn-export" id="btn-export-sql" onclick="exportSql()">Export SQL</button>
-      <button class="btn-delete" id="btn-delete-workflow" onclick="deleteLocal()">Delete local</button>
+      <button class="btn-delete" id="btn-delete-workflow" onclick="deleteLocal()">Delete from Snowflake</button>
     </div>
   </div>
 </div>
@@ -834,8 +836,8 @@ const WORKFLOW_INDEX_KEY = 'sisula-webapp:workflow-index';
 const TEMPLATE_TEXT_KEY = 'sisula-webapp:template-text';
 const TEMPLATE_NAME_KEY = 'sisula-webapp:template-name';
 const CURRENT_DRAFT_KEY = 'sisula-webapp:current-draft';
-const BUNDLED_TEMPLATE_NAME = 'CreateTaskGraph.sisula';
-const SQL_PLACEHOLDER = 'Hosted builds load the bundled CreateTaskGraph.sisula automatically. If you opened this page directly as a file, load the template manually, then click Render SQL.';
+const BUNDLED_TEMPLATE_NAME = 'templates/CreateTaskGraph.sql';
+const SQL_PLACEHOLDER = 'Hosted builds load the bundled templates/CreateTaskGraph.sql automatically. If you opened this page directly as a file, load the template manually, then click Render SQL.';
 
 function taskId(task, index) {
   return task.name || ('task_' + index);
@@ -1400,19 +1402,39 @@ LayoutEngine.init();
 LayoutEngine.layout = LayoutEngine.simpleLayout;
 DrawingEngine.init();
 
-// --- Local storage + file helpers ---
-function readStoredWorkflow(name) {
-  let raw = window.localStorage.getItem(workflowStorageKey(name));
-  if (!raw) return null;
-  let workflow = JSON.parse(raw);
-  if (!workflow || typeof workflow !== 'object' || Array.isArray(workflow)) {
-    throw new Error('Stored workflow "' + name + '" is invalid.');
+// --- API + storage helpers ---
+async function api(url, opts) {
+  let response;
+  try {
+    response = await window.fetch(url, opts || {});
+  } catch (e) {
+    showStatus(e.message || 'Request failed', 'error');
+    throw e;
   }
-  return workflow;
+
+  if (!response.ok) {
+    let message = 'Request failed';
+    try {
+      let payload = await response.json();
+      message = payload && payload.detail ? payload.detail : JSON.stringify(payload);
+    } catch (jsonError) {
+      let text = await response.text();
+      message = text || ('HTTP ' + response.status);
+    }
+    let error = new Error(message);
+    showStatus(message, 'error');
+    throw error;
+  }
+
+  return response.json();
+}
+
+function readStoredWorkflow(name) {
+  return workflows.find((workflow) => workflow.name === name) || null;
 }
 
 async function loadWorkflows(restoreDraft) {
-  workflows = loadStoredWorkflowNames().map((name) => ({ name: name, type: 'Local' }));
+  workflows = await api('/api/workflows');
   renderSidebar();
   if (restoreDraft && restoreCurrentDraft()) {
     return;
@@ -1432,13 +1454,10 @@ async function loadWorkflows(restoreDraft) {
 }
 
 async function loadWorkflow(name) {
-  let workflow = readStoredWorkflow(name);
-  if (!workflow) {
-    throw new Error('Workflow "' + name + '" was not found in this browser.');
-  }
-  current = name;
-  currentCfId = null;
-  data = workflow;
+  let workflow = await api('/api/workflows/' + encodeURIComponent(name));
+  current = workflow.name;
+  currentCfId = workflow.cf_id;
+  data = JSON.parse(workflow.content);
   data.TASKS = Array.isArray(data.TASKS) ? data.TASKS : [];
   loadLayoutState(current, extractLegacyLayout(data));
   selectedTask = 0;
@@ -1459,23 +1478,91 @@ async function saveWorkflow() {
   data.WORKFLOW = nextName;
   updatePositions(false);
   try {
-    window.localStorage.setItem(workflowStorageKey(nextName), JSON.stringify(serializeWorkflow()));
-    let names = loadStoredWorkflowNames().filter((name) => name !== previousName);
-    if (!names.includes(nextName)) names.push(nextName);
-    saveStoredWorkflowNames(names);
+    let saved = await api('/api/workflows/' + encodeURIComponent(nextName), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(serializeWorkflow())
+    });
     if (previousName && previousName !== nextName) {
-      window.localStorage.removeItem(workflowStorageKey(previousName));
+      await api('/api/workflows/' + encodeURIComponent(previousName), { method: 'DELETE' });
       renameStoredLayout(previousName, nextName);
     }
-    current = nextName;
+    current = saved.name;
+    currentCfId = saved.cf_id;
     dirty = false;
     persistCurrentDraft();
     renderSidebar();
     updateActionButtons();
-    showStatus('Saved locally', 'success');
+    showStatus('Saved to Snowflake', 'success');
     await loadWorkflows();
   } catch (e) {
     showStatus(e.message || 'Saving failed', 'error');
+  }
+}
+
+async function installWorkflow() {
+  if (installing) return;
+  if (!currentCfId || dirty || current === '__new__') {
+    showStatus('Install requires a saved, unmodified workflow', 'error');
+    return;
+  }
+
+  openInstallModal('Install ' + current);
+  appendInstallLog('> install workflow ' + current + ' (CF_ID=' + currentCfId + ')');
+  installing = true;
+  updateActionButtons();
+  let hadError = false;
+
+  try {
+    let response = await window.fetch('/api/workflows/' + encodeURIComponent(currentCfId) + '/install/stream', {
+      method: 'POST'
+    });
+    if (!response.ok) {
+      let message = await response.text();
+      throw new Error(message || ('HTTP ' + response.status));
+    }
+    if (!response.body) {
+      throw new Error('Install stream is unavailable');
+    }
+
+    let reader = response.body.getReader();
+    let decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      let result = await reader.read();
+      buffer += decoder.decode(result.value || new Uint8Array(), { stream: !result.done });
+      let lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      lines.forEach((line) => {
+        if (!line) return;
+        appendInstallLog(line);
+        if (line.indexOf('[ERROR]') >= 0) hadError = true;
+      });
+      if (result.done) break;
+    }
+
+    if (buffer) {
+      appendInstallLog(buffer);
+      if (buffer.indexOf('[ERROR]') >= 0) hadError = true;
+    }
+    if (hadError) {
+      setInstallModalState('error');
+      showStatus('Install failed', 'error');
+      return;
+    }
+    showStatus('Install finished', 'success');
+  } catch (e) {
+    hadError = true;
+    appendInstallLog('[ERROR] ' + (e.message || 'Install failed'));
+    setInstallModalState('error');
+    showStatus(e.message || 'Install failed', 'error');
+  } finally {
+    installing = false;
+    updateActionButtons();
+    let closeButton = getId('install-modal-close');
+    if (closeButton) closeButton.disabled = false;
+    if (!hadError) setInstallModalState('success');
   }
 }
 
@@ -1493,11 +1580,10 @@ async function deleteWorkflow() {
     updateActionButtons();
     return;
   }
-  if (!confirm('Delete "' + current + '" from this browser?')) return;
+  if (!confirm('Delete "' + current + '" from Snowflake?')) return;
   clearLayoutState(current);
   try {
-    window.localStorage.removeItem(workflowStorageKey(current));
-    saveStoredWorkflowNames(loadStoredWorkflowNames().filter((name) => name !== current));
+    await api('/api/workflows/' + encodeURIComponent(current), { method: 'DELETE' });
   } catch (e) {
     showStatus(e.message || 'Delete failed', 'error');
     return;
@@ -1507,7 +1593,7 @@ async function deleteWorkflow() {
   data = null;
   clearCurrentDraft();
   clearSqlPreview();
-  showStatus('Deleted local workflow', 'success');
+  showStatus('Deleted workflow', 'success');
   await loadWorkflows();
 }
 
@@ -1569,7 +1655,7 @@ async function renderSqlPreview() {
   if (!await ensureTemplateLoaded()) {
     switchTab('sql');
     renderSqlTab();
-    showStatus('Load CreateTaskGraph.sisula first', 'error');
+    showStatus('Load templates/CreateTaskGraph.sql first', 'error');
     return;
   }
   updatePositions(false);
@@ -1599,7 +1685,7 @@ async function exportSqlFile() {
   if (!await ensureTemplateLoaded()) {
     switchTab('sql');
     renderSqlTab();
-    showStatus('Load CreateTaskGraph.sisula first', 'error');
+    showStatus('Load templates/CreateTaskGraph.sql first', 'error');
     return;
   }
   if (!lastRenderedSql || dirty) {
@@ -1713,6 +1799,7 @@ function updateActionButtons() {
   let hasData = !!data;
   let hasTemplate = !!templateText || canAutoLoadBundledTemplate();
   let saveButton = getId('btn-save-local');
+  let installButton = getId('btn-install');
   let exportJsonButton = getId('btn-export-json');
   let renderButton = getId('btn-render-sql');
   let exportSqlButton = getId('btn-export-sql');
@@ -1720,7 +1807,13 @@ function updateActionButtons() {
 
   if (saveButton) {
     saveButton.disabled = !hasData;
-    saveButton.title = hasData ? 'Save this workflow in browser local storage' : 'Create or load a workflow first';
+    saveButton.title = hasData ? 'Save this workflow definition to Snowflake' : 'Create or load a workflow first';
+  }
+  if (installButton) {
+    let canInstall = !!data && !!currentCfId && current !== '__new__' && !dirty && !installing;
+    installButton.disabled = !canInstall;
+    installButton.textContent = installing ? 'Installing...' : 'Install';
+    installButton.title = canInstall ? 'Install tasks from the saved workflow definition' : 'Install is only available for a saved, unmodified workflow';
   }
   if (exportJsonButton) {
     exportJsonButton.disabled = !hasData;
@@ -1728,7 +1821,7 @@ function updateActionButtons() {
   }
   if (renderButton) {
     renderButton.disabled = !hasData || !hasTemplate;
-    renderButton.title = !hasData ? 'Create or load a workflow first' : (templateText ? 'Render DDL from the loaded Sisula template' : 'Render DDL using the bundled CreateTaskGraph.sisula template');
+    renderButton.title = !hasData ? 'Create or load a workflow first' : (templateText ? 'Render DDL from the loaded Sisula template' : 'Render DDL using the bundled templates/CreateTaskGraph.sql template');
   }
   if (exportSqlButton) {
     exportSqlButton.disabled = !hasData || !hasTemplate;
@@ -1736,7 +1829,7 @@ function updateActionButtons() {
   }
   if (deleteButton) {
     deleteButton.disabled = !hasData;
-    deleteButton.title = current === '__new__' ? 'Discard the unsaved workflow' : 'Delete this workflow from browser local storage';
+    deleteButton.title = current === '__new__' ? 'Discard the unsaved workflow' : 'Delete this workflow from Snowflake';
   }
 }
 
@@ -2491,6 +2584,8 @@ function saveLocal() {
 }
 
 function exportJson() { exportWorkflowJson(); }
+
+async function install() { await installWorkflow(); }
 
 async function renderSql() { await renderSqlPreview(); }
 

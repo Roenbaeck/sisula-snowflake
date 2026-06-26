@@ -1,10 +1,5 @@
 #!/bin/bash
-# Run the Workflow Editor locally
-# Usage: ./run.sh <connection_name>
-#
-# Reads connection details from ~/.snowflake/config.toml or
-# ~/Library/Application Support/snowflake/config.toml
-# Automatically creates a virtual environment on first run.
+# Run the Workflower webapp locally.
 
 set -euo pipefail
 
@@ -28,13 +23,12 @@ for p in paths:
     exit 1
 fi
 
-echo "=== Workflow Editor ==="
+echo "=== Workflower Webapp ==="
 echo "Connection: $1"
 echo ""
 
 cd "$SCRIPT_DIR"
 
-# Set up virtual environment
 VENV_DIR="$SCRIPT_DIR/.venv"
 if [ ! -f "$VENV_DIR/bin/python3" ]; then
     echo "Creating virtual environment..."

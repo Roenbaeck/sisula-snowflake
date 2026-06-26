@@ -12,7 +12,7 @@ fi
 
 CONNECTION="$1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SISULA_SOURCE="$SCRIPT_DIR/src/sisula.js"
+SISULA_SOURCE="$SCRIPT_DIR/webapp/sisula.js"
 DEPLOY_TEMPLATE="$SCRIPT_DIR/sql/deploy.sql"
 
 render_deploy_sql() {

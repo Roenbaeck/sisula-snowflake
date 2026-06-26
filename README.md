@@ -14,7 +14,7 @@ Live web app: [https://roenbaeck.github.io/workflower/](https://roenbaeck.github
 - A Snowflake implementation of the Sisula templating engine, exposed through the `SISULATE` function and helper procedures.
 - A task-graph template flow that renders workflow JSON into Snowflake `CREATE TASK` SQL.
 - Metadata deployment SQL for logging and workflow support tables.
-- A local browser-based workflow editor for inspecting and editing workflow graphs.
+- A browser-based workflow editor for inspecting and editing workflow graphs, backed by a minimal FastAPI server.
 
 ## Core Docs
 
@@ -26,11 +26,10 @@ Use `docs/SISULA.md` as the primary language reference for the Snowflake Sisula 
 ## Repo Layout
 
 - `sql/`: deploys the Snowflake Sisula engine and SQL-based tests.
-- `templates/`: Sisula templates, including `CreateTaskGraph.sql`.
 - `metadata/`: metadata schema, model, knot values, logging procedures, and configuration procedures.
-- `src/`: the JavaScript Sisula renderer used for local rendering and testing.
+- `webapp/`: the workflow editor UI, backend, static assets, and the shared JavaScript Sisula renderer.
+- `webapp/templates/`: canonical Sisula templates used by the webapp and deployment scripts.
 - `examples/`: example workflow bindings and rendered SQL output.
-- `local/`: the local workflow editor, backend, and frontend assets.
 - `sisula-mssql/`: the older SQL Server CLR implementation kept as a reference implementation and compatibility baseline.
 
 ## Typical Flow
@@ -39,7 +38,7 @@ Use `docs/SISULA.md` as the primary language reference for the Snowflake Sisula 
 2. Deploy the metadata objects if you want workflow logging and task-graph support.
 3. Author or edit workflow JSON.
 4. Render and optionally deploy task graph SQL from the workflow definition.
-5. Use the local editor to inspect or edit workflows visually.
+5. Use the web app to inspect or edit workflows visually.
 
 ## Scripts
 
@@ -51,8 +50,8 @@ Use `docs/SISULA.md` as the primary language reference for the Snowflake Sisula 
 | `deploy_metadata.sh` | Deploys the metadata schema and supporting procedures from `metadata/`. | Runs the install steps in order, seeds `CreateTaskGraph` into metadata template storage, and stops on the first failure. |
 | `install.sh` | Renders workflow JSON files with a Sisula template and optionally deploys the generated SQL. | Default template is `CreateTaskGraph`; `--dry-run` writes SQL to `<directory>/rendered/`. |
 | `test_all.sh` | Runs the Snowflake SQL test suite in `sql/`. | Validates deployed behavior in Snowflake. |
-| `test_local.js` | Runs a local Node.js smoke test against `src/sisula.js`. | Fast check for parser and renderer behavior without Snowflake. |
-| `local/run.sh` | Starts the local workflow editor and API server. | Creates `local/.venv` on first run and serves the editor on `http://localhost:8000/` by default. |
+| `test_local.js` | Runs a local Node.js smoke test against `webapp/sisula.js`. | Fast check for parser and renderer behavior without Snowflake. |
+| `webapp/run.sh` | Starts the workflow editor and API server. | Creates `webapp/.venv` on first run and serves the editor on `http://localhost:8000/` by default. |
 
 ### Legacy reference scripts
 
@@ -92,26 +91,26 @@ These belong to the SQL Server CLR reference implementation in `sisula-mssql/` r
 node test_local.js
 ```
 
-### 5. Start the local workflow editor
+### 5. Start the workflow editor
 
 ```bash
-./local/run.sh <connection_name>
+./webapp/run.sh <connection_name>
 ```
 
 ## Requirements
 
 - Snowflake CLI `snow`
 - Node.js for `test_local.js` and local rendering
-- Python 3 for the local editor backend
-- A configured Snowflake connection name available to the CLI and local editor
+- Python 3 for the workflow editor backend
+- A configured Snowflake connection name available to the CLI and workflow editor
 
 ## Stale Script Assessment
 
 I did not find any obviously stale executable scripts in the active Snowflake surface of this repo.
 
-- `deploy.sh`, `deploy_metadata.sh`, `install.sh`, `test_all.sh`, and `local/run.sh` all point at files and directories that currently exist.
+- `deploy.sh`, `deploy_metadata.sh`, `install.sh`, `test_all.sh`, and `webapp/run.sh` all point at files and directories that currently exist.
 - The shell scripts pass `bash -n` syntax validation.
-- `test_local.js` runs successfully against `src/sisula.js`.
+- `test_local.js` runs successfully against `webapp/sisula.js`.
 
 One distinction is worth keeping clear:
 

@@ -22,8 +22,8 @@ usage() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMPLATES_DIR="$SCRIPT_DIR/templates"
-RENDERER="$SCRIPT_DIR/src/sisula.js"
+TEMPLATES_DIR="$SCRIPT_DIR/webapp/templates"
+RENDERER="$SCRIPT_DIR/webapp/sisula.js"
 
 CONNECTION=""
 DIR=""

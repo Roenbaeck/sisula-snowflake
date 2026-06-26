@@ -47,7 +47,7 @@ JSON binding and resolution
 - Scalar values are returned as strings; complex values (objects/arrays) are JSON-stringified.
 
 Authoring and installing templates
-- Author templates as `.sql` files under `templates/` to get proper SQL syntax highlighting in VS Code.
+- Author templates as `.sql` files under `webapp/templates/` to get proper SQL syntax highlighting in VS Code.
 - Install templates into Snowflake with `CALL SP_SISULA_TEMPLATE_CRUD('UPSERT', 'template_name', '$$...$$')`. Templates are stored in the metadata model rather than a standalone table.
 - `./deploy_metadata.sh` seeds `CreateTaskGraph` into metadata template storage so the web UI and render helpers can resolve it immediately after metadata deployment.
 - Render by calling `SELECT SISULATE(template, bindings)` or `CALL SP_SISULA_RENDER('template_name', bindings)`.
