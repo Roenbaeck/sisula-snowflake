@@ -1,4 +1,7 @@
-# sisula-snowflake
+<center><img src="webapp/android-chrome-192x192.png" alt="Workflower icon" width="96" /></center>
+
+# Workflower
+
 
 Sisula for Snowflake: a template renderer, deployment surface, and workflow editor for generating and managing Snowflake task graphs from JSON workflow definitions.
 
