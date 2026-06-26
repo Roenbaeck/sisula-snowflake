@@ -631,6 +631,37 @@ function taskId(task, index) {
   return task.name || ('task_' + index);
 }
 
+function nextTaskName(baseName) {
+  let usedNames = new Set((data && data.TASKS || []).map((task) => task && task.name).filter(Boolean));
+  if (!usedNames.has(baseName)) return baseName;
+  let suffix = 2;
+  while (usedNames.has(`${baseName}_${suffix}`)) suffix += 1;
+  return `${baseName}_${suffix}`;
+}
+
+function getTaskPosition(task, index) {
+  let id = taskId(task, index);
+  let saved = getLayoutPosition(id);
+  if (saved && saved.x != null && saved.y != null) return { x: saved.x, y: saved.y };
+  let node = nodeMap[id];
+  if (node && node.xPosition != null && node.yPosition != null) {
+    return { x: node.xPosition, y: node.yPosition };
+  }
+  return null;
+}
+
+function getNewTaskPosition(anchorTask, anchorIndex) {
+  let angle = Math.random() * Math.PI * 2;
+  let distance = 140 + Math.random() * 40;
+  let anchor = anchorTask ? getTaskPosition(anchorTask, anchorIndex) : null;
+  let baseX = anchor ? anchor.x : DEFAULT_VIEWBOX.x + DEFAULT_VIEWBOX.width / 2;
+  let baseY = anchor ? anchor.y : DEFAULT_VIEWBOX.y + DEFAULT_VIEWBOX.height / 2;
+  return {
+    x: baseX + Math.cos(angle) * distance,
+    y: baseY + Math.sin(angle) * distance,
+  };
+}
+
 function layoutStorageKey(name) {
   let workflowName = name && name !== '__new__' ? name : (data && data.WORKFLOW) || 'NewWorkflow';
   return 'workflow-editor-layout:' + workflowName;
@@ -1709,8 +1740,14 @@ function removeLastStep() {
 }
 
 function addTask() {
-  data.TASKS.push({ name: 'new_task', description: '', steps: [], after: [] });
-  selectedTask = data.TASKS.length - 1;
+  let anchorIndex = selectedTask;
+  let anchorTask = data.TASKS[anchorIndex] || null;
+  let task = { name: nextTaskName('new_task'), description: '', steps: [], after: [] };
+  data.TASKS.push(task);
+  let newIndex = data.TASKS.length - 1;
+  layoutState.positions[taskId(task, newIndex)] = { ...getNewTaskPosition(anchorTask, anchorIndex), fixed: false };
+  persistLayoutState();
+  selectedTask = newIndex;
   setDirty(true);
   LayoutEngine.equilibrium = false;
   renderEditor();

@@ -5,6 +5,8 @@
 
 Sisula for Snowflake: a template renderer, deployment surface, and workflow editor for generating and managing Snowflake task graphs from JSON workflow definitions.
 
+Live web app: [https://roenbaeck.github.io/workflower/](https://roenbaeck.github.io/workflower/)
+
 ![Workflow Editor screenshot](docs/workflow-editor.png)
 
 ## What This Repo Contains
